@@ -12,6 +12,10 @@ if (!isset($panelLabel)) {
     $panelLabel = 'Dashboard';
 }
 
+if (!isset($extraStyles)) {
+    $extraStyles = [];
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -20,6 +24,10 @@ if (!isset($panelLabel)) {
     <title><?php echo e($pageTitle); ?> | ProctorX</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="<?php echo e(app_url('assets/css/auth.css')); ?>">
+
+    <?php foreach ($extraStyles as $style): ?>
+        <link rel="stylesheet" href="<?php echo e(app_url($style)); ?>">
+    <?php endforeach; ?>
 </head>
 <body>
 
