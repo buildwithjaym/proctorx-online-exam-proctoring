@@ -402,3 +402,49 @@
         order: -1;
     }
 }
+
+.proctor-alert {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    color: #92400E;
+    border-radius: 22px;
+    padding: 18px;
+    margin-bottom: 22px;
+}
+
+.proctor-alert strong {
+    display: block;
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.proctor-alert p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+.proctor-alert button {
+    min-height: 42px;
+    border: none;
+    border-radius: 14px;
+    padding: 0 16px;
+    background: var(--primary-green);
+    color: #ffffff;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+    .proctor-alert {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .proctor-alert button {
+        width: 100%;
+    }
+}

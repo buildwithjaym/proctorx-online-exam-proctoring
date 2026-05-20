@@ -28,15 +28,6 @@ function take_exam_question_label($type)
     return 'Question';
 }
 
-function take_exam_strip_choice_label($choiceText)
-{
-    if (preg_match('/^[A-D]\.\s(.+)$/', $choiceText, $matches)) {
-        return $choiceText;
-    }
-
-    return $choiceText;
-}
-
 $stmt = $pdo->prepare("
     SELECT 
         ea.id AS attempt_id,
@@ -174,8 +165,10 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 <section 
     class="take-exam-shell" 
     data-save-url="<?php echo e(app_url('actions/save_answer.php')); ?>" 
+    data-log-url="<?php echo e(app_url('actions/log_event.php')); ?>"
     data-csrf="<?php echo e($token); ?>" 
     data-attempt-id="<?php echo e($attemptId); ?>"
+    data-fullscreen-required="<?php echo e($attempt['fullscreen_required']); ?>"
 >
     <div class="exam-header-card">
         <div>
@@ -192,6 +185,19 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
         </div>
     </div>
 
+    <?php if ((int) $attempt['fullscreen_required'] === 1): ?>
+        <div class="proctor-alert">
+            <div>
+                <strong>Fullscreen mode is required</strong>
+                <p>For exam integrity, please enter fullscreen mode before continuing. Exiting fullscreen may be recorded as a proctoring event.</p>
+            </div>
+
+            <button type="button" id="enterFullscreenBtn">
+                Enter Fullscreen
+            </button>
+        </div>
+    <?php endif; ?>
+
     <form method="POST" action="<?php echo e(app_url('actions/submit_exam.php')); ?>" id="examForm">
         <input type="hidden" name="csrf_token" value="<?php echo e($token); ?>">
         <input type="hidden" name="attempt_id" value="<?php echo e($attemptId); ?>">
@@ -202,6 +208,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                 <?php foreach ($questions as $index => $question): ?>
                     <?php
                         $questionId = (int) $question['id'];
+                        $questionType = $question['question_type'];
+                        $typeLabel = take_exam_question_label($questionType);
                         $savedChoiceId = '';
                         $savedText = '';
 
@@ -209,9 +217,6 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                             $savedChoiceId = $savedAnswerMap[$questionId]['choice_id'];
                             $savedText = $savedAnswerMap[$questionId]['answer_text'];
                         }
-
-                        $questionType = $question['question_type'];
-                        $typeLabel = take_exam_question_label($questionType);
                     ?>
 
                     <article class="question-card" id="question-<?php echo e($questionId); ?>" data-question-card>
@@ -246,7 +251,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                                                 data-question-type="<?php echo e($questionType); ?>"
                                                 <?php echo (string) $savedChoiceId === (string) $choice['id'] ? 'checked' : ''; ?>
                                             >
-                                            <span><?php echo e(take_exam_strip_choice_label($choice['choice_text'])); ?></span>
+                                            <span><?php echo e($choice['choice_text']); ?></span>
                                         </label>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
@@ -342,6 +347,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     </form>
 </section>
 
-<script src="<?php echo e(app_url('assets/js/take-exam.js?v=2')); ?>"></script>
+<script src="<?php echo e(app_url('assets/js/take-exam.js?v=3')); ?>"></script>
+<script src="<?php echo e(app_url('assets/js/proctoring.js?v=1')); ?>"></script>
 
 <?php require_once __DIR__ . '/../includes/dashboard_footer.php'; ?>
