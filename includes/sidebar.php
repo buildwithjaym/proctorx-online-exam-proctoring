@@ -19,7 +19,6 @@ $role = current_user_role();
             <a class="<?php echo $activePage === 'proctors' ? 'active' : ''; ?>" href="<?php echo e(app_url('teacher/proctors.php')); ?>">Proctors</a>
             <a class="<?php echo $activePage === 'classes' ? 'active' : ''; ?>" href="<?php echo e(app_url('teacher/classes.php')); ?>">Classes</a>
             <a class="<?php echo $activePage === 'exams' ? 'active' : ''; ?>" href="<?php echo e(app_url('teacher/exams.php')); ?>">Exams</a>
-            <a class="<?php echo $activePage === 'results' ? 'active' : ''; ?>" href="<?php echo e(app_url('teacher/results.php')); ?>">Results</a>
         <?php endif; ?>
 
         <?php if ($role === 'student'): ?>
