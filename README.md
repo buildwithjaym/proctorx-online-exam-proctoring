@@ -1227,7 +1227,7 @@ git commit -m "Complete ProctorX MVP distributed online exam proctoring system"
 
 ## Author
 
-Developed as a full-stack academic web application project using PHP, MySQL, HTML, CSS, JavaScript, and XAMPP.
+Developed by Jaymar H. Maruji
 
 ---
 
