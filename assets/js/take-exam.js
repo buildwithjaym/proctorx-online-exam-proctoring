@@ -4,11 +4,19 @@ document.addEventListener("DOMContentLoaded", function () {
     var form = document.getElementById("examForm");
     var autoSubmit = document.getElementById("autoSubmit");
     var submitButton = document.getElementById("submitExamButton");
+    var prevButton = document.getElementById("prevQuestionBtn");
+    var nextButton = document.getElementById("nextQuestionBtn");
+    var stepIndicator = document.getElementById("questionStepIndicator");
+    var questionCards = document.querySelectorAll(".question-card");
+    var questionNavLinks = document.querySelectorAll("[data-question-jump]");
     var saveTimer = null;
+    var activeQuestionIndex = 0;
 
     if (!shell || !timer || !form) {
         return;
     }
+
+    shell.classList.add("exam-paged");
 
     var saveUrl = shell.getAttribute("data-save-url");
     var csrfToken = shell.getAttribute("data-csrf");
@@ -90,6 +98,14 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
+    function markAnswered(questionId) {
+        var navLink = document.querySelector('[href="#question-' + questionId + '"]');
+
+        if (navLink) {
+            navLink.classList.add("answered");
+        }
+    }
+
     function saveAnswer(element) {
         var questionId = element.getAttribute("data-question-id");
         var questionType = element.getAttribute("data-question-type");
@@ -125,6 +141,7 @@ document.addEventListener("DOMContentLoaded", function () {
         .then(function (data) {
             if (data.success) {
                 setSaveStatus(questionId, "Answer saved", "saved");
+                markAnswered(questionId);
             } else {
                 setSaveStatus(questionId, data.message, "error");
             }
@@ -140,6 +157,57 @@ document.addEventListener("DOMContentLoaded", function () {
         saveTimer = setTimeout(function () {
             saveAnswer(element);
         }, 500);
+    }
+
+    function showQuestion(index) {
+        if (questionCards.length <= 0) {
+            return;
+        }
+
+        if (index < 0) {
+            index = 0;
+        }
+
+        if (index >= questionCards.length) {
+            index = questionCards.length - 1;
+        }
+
+        activeQuestionIndex = index;
+
+        for (var i = 0; i < questionCards.length; i++) {
+            questionCards[i].classList.remove("active-question");
+        }
+
+        for (var j = 0; j < questionNavLinks.length; j++) {
+            questionNavLinks[j].classList.remove("active");
+        }
+
+        questionCards[activeQuestionIndex].classList.add("active-question");
+
+        if (questionNavLinks[activeQuestionIndex]) {
+            questionNavLinks[activeQuestionIndex].classList.add("active");
+        }
+
+        if (stepIndicator) {
+            stepIndicator.textContent = "Question " + (activeQuestionIndex + 1) + " of " + questionCards.length;
+        }
+
+        if (prevButton) {
+            prevButton.disabled = activeQuestionIndex === 0;
+        }
+
+        if (nextButton) {
+            if (activeQuestionIndex === questionCards.length - 1) {
+                nextButton.textContent = "Review";
+            } else {
+                nextButton.textContent = "Next";
+            }
+        }
+
+        questionCards[activeQuestionIndex].scrollIntoView({
+            behavior: "smooth",
+            block: "start"
+        });
     }
 
     var inputs = document.querySelectorAll("[data-answer-input]");
@@ -158,6 +226,40 @@ document.addEventListener("DOMContentLoaded", function () {
             updateWordCounter(this);
             debounceSave(this);
         });
+
+        var inputQuestionId = inputs[i].getAttribute("data-question-id");
+
+        if ((inputs[i].type === "radio" && inputs[i].checked) || (inputs[i].type !== "radio" && inputs[i].value.trim() !== "")) {
+            markAnswered(inputQuestionId);
+        }
+    }
+
+    if (prevButton) {
+        prevButton.addEventListener("click", function () {
+            showQuestion(activeQuestionIndex - 1);
+        });
+    }
+
+    if (nextButton) {
+        nextButton.addEventListener("click", function () {
+            if (activeQuestionIndex === questionCards.length - 1) {
+                window.scrollTo({
+                    top: document.body.scrollHeight,
+                    behavior: "smooth"
+                });
+                return;
+            }
+
+            showQuestion(activeQuestionIndex + 1);
+        });
+    }
+
+    for (var j = 0; j < questionNavLinks.length; j++) {
+        questionNavLinks[j].addEventListener("click", function (event) {
+            event.preventDefault();
+            var index = parseInt(this.getAttribute("data-question-jump"), 10);
+            showQuestion(index);
+        });
     }
 
     if (submitButton) {
@@ -170,6 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    showQuestion(0);
     updateTimer();
     setInterval(updateTimer, 1000);
 });

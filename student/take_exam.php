@@ -7,6 +7,36 @@ require_role('student');
 $studentId = current_user_id();
 $attemptId = isset($_GET['attempt_id']) ? (int) $_GET['attempt_id'] : 0;
 
+function take_exam_question_label($type)
+{
+    if ($type === 'multiple_choice') {
+        return 'Multiple Choice';
+    }
+
+    if ($type === 'true_false') {
+        return 'True or False';
+    }
+
+    if ($type === 'identification') {
+        return 'Identification';
+    }
+
+    if ($type === 'essay') {
+        return 'Essay';
+    }
+
+    return 'Question';
+}
+
+function take_exam_strip_choice_label($choiceText)
+{
+    if (preg_match('/^[A-D]\.\s(.+)$/', $choiceText, $matches)) {
+        return $choiceText;
+    }
+
+    return $choiceText;
+}
+
 $stmt = $pdo->prepare("
     SELECT 
         ea.id AS attempt_id,
@@ -43,6 +73,10 @@ if ($attempt['attempt_status'] === 'submitted' || $attempt['attempt_status'] ===
 }
 
 if ($attempt['attempt_status'] !== 'in_progress') {
+    redirect_to('student/exam_instructions.php?exam_id=' . $attempt['exam_id']);
+}
+
+if ($attempt['status'] !== 'published') {
     redirect_to('student/exam_instructions.php?exam_id=' . $attempt['exam_id']);
 }
 
@@ -137,7 +171,8 @@ $extraStyles = ['assets/css/take-exam.css'];
 require_once __DIR__ . '/../includes/dashboard_header.php';
 ?>
 
-<section class="take-exam-shell" 
+<section 
+    class="take-exam-shell" 
     data-save-url="<?php echo e(app_url('actions/save_answer.php')); ?>" 
     data-csrf="<?php echo e($token); ?>" 
     data-attempt-id="<?php echo e($attemptId); ?>"
@@ -146,7 +181,9 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
         <div>
             <span>Exam in Progress</span>
             <h2><?php echo e($attempt['title']); ?></h2>
-            <p><?php echo e($attempt['subject']); ?></p>
+            <p>
+                <?php echo $attempt['subject'] !== '' ? e($attempt['subject']) : 'Answer each question carefully before submitting.'; ?>
+            </p>
         </div>
 
         <div class="timer-card">
@@ -173,19 +210,19 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                             $savedText = $savedAnswerMap[$questionId]['answer_text'];
                         }
 
-                        $typeLabel = ucwords(str_replace('_', ' ', $question['question_type']));
-
-                        if ($question['question_type'] === 'true_false') {
-                            $typeLabel = 'True or False';
-                        }
+                        $questionType = $question['question_type'];
+                        $typeLabel = take_exam_question_label($questionType);
                     ?>
 
-                    <article class="question-card" id="question-<?php echo e($questionId); ?>">
+                    <article class="question-card" id="question-<?php echo e($questionId); ?>" data-question-card>
                         <input type="hidden" name="question_ids[]" value="<?php echo e($questionId); ?>">
 
                         <div class="question-top">
                             <div>
-                                <span class="question-number">Question <?php echo e($index + 1); ?></span>
+                                <span class="question-number">
+                                    Question <?php echo e($index + 1); ?> of <?php echo e(count($questions)); ?>
+                                </span>
+
                                 <h3><?php echo e($question['question_text']); ?></h3>
                             </div>
 
@@ -195,7 +232,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                             </div>
                         </div>
 
-                        <?php if ($question['question_type'] === 'multiple_choice' || $question['question_type'] === 'true_false'): ?>
+                        <?php if ($questionType === 'multiple_choice' || $questionType === 'true_false'): ?>
                             <div class="choice-list">
                                 <?php if (isset($choiceMap[$questionId])): ?>
                                     <?php foreach ($choiceMap[$questionId] as $choice): ?>
@@ -206,17 +243,17 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                                                 value="<?php echo e($choice['id']); ?>"
                                                 data-answer-input
                                                 data-question-id="<?php echo e($questionId); ?>"
-                                                data-question-type="<?php echo e($question['question_type']); ?>"
+                                                data-question-type="<?php echo e($questionType); ?>"
                                                 <?php echo (string) $savedChoiceId === (string) $choice['id'] ? 'checked' : ''; ?>
                                             >
-                                            <span><?php echo e($choice['choice_text']); ?></span>
+                                            <span><?php echo e(take_exam_strip_choice_label($choice['choice_text'])); ?></span>
                                         </label>
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </div>
                         <?php endif; ?>
 
-                        <?php if ($question['question_type'] === 'identification'): ?>
+                        <?php if ($questionType === 'identification'): ?>
                             <div class="text-answer-box">
                                 <label>Your Answer</label>
                                 <input 
@@ -231,12 +268,12 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                             </div>
                         <?php endif; ?>
 
-                        <?php if ($question['question_type'] === 'essay'): ?>
+                        <?php if ($questionType === 'essay'): ?>
                             <div class="text-answer-box">
                                 <label>Your Essay Response</label>
                                 <textarea 
                                     name="text_answers[<?php echo e($questionId); ?>]" 
-                                    placeholder="Write your essay answer here"
+                                    placeholder="Write your answer here. Your teacher will read and score this manually."
                                     data-answer-input
                                     data-question-id="<?php echo e($questionId); ?>"
                                     data-question-type="essay"
@@ -245,16 +282,30 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 
                                 <div class="word-count-line">
                                     <span id="word-count-<?php echo e($questionId); ?>">0 words</span>
-                                    <small>Essay answers will be reviewed manually by your teacher.</small>
+                                    <small>This answer will be checked manually by your teacher.</small>
                                 </div>
                             </div>
                         <?php endif; ?>
 
                         <div class="save-status" id="save-status-<?php echo e($questionId); ?>">
-                            Answer not saved yet
+                            <?php echo isset($savedAnswerMap[$questionId]) ? 'Answer saved' : 'Answer not saved yet'; ?>
                         </div>
                     </article>
                 <?php endforeach; ?>
+
+                <div class="question-step-actions">
+                    <button type="button" class="secondary-action" id="prevQuestionBtn">
+                        Back
+                    </button>
+
+                    <div class="question-step-indicator" id="questionStepIndicator">
+                        Question 1 of <?php echo e(count($questions)); ?>
+                    </div>
+
+                    <button type="button" class="primary-button" id="nextQuestionBtn">
+                        Next
+                    </button>
+                </div>
             </main>
 
             <aside class="exam-side-panel">
@@ -262,9 +313,12 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <span>Exam Progress</span>
                     <h3><?php echo e(count($questions)); ?> Questions</h3>
 
-                    <div class="question-nav">
+                    <div class="question-nav" id="questionNav">
                         <?php foreach ($questions as $index => $question): ?>
-                            <a href="#question-<?php echo e($question['id']); ?>">
+                            <a 
+                                href="#question-<?php echo e($question['id']); ?>"
+                                data-question-jump="<?php echo e($index); ?>"
+                            >
                                 <?php echo e($index + 1); ?>
                             </a>
                         <?php endforeach; ?>
@@ -272,20 +326,22 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 
                     <div class="exam-reminders">
                         <strong>Reminders</strong>
-                        <p>Do not refresh, close, or leave the page while taking the exam.</p>
+                        <p>Focus on one question at a time. Your answers are saved while you work.</p>
                     </div>
 
                     <button type="submit" class="primary-button submit-exam-button" id="submitExamButton">
                         Submit Exam
                     </button>
 
-                    <a href="exams.php" class="secondary-action back-link">Back to Exams</a>
+                    <a href="exams.php" class="secondary-action back-link">
+                        Back to Exams
+                    </a>
                 </div>
             </aside>
         </div>
     </form>
 </section>
 
-<script src="<?php echo e(app_url('assets/js/take-exam.js?v=1')); ?>"></script>
+<script src="<?php echo e(app_url('assets/js/take-exam.js?v=2')); ?>"></script>
 
 <?php require_once __DIR__ . '/../includes/dashboard_footer.php'; ?>

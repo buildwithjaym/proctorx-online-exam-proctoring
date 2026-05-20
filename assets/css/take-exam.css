@@ -333,3 +333,72 @@
         grid-template-columns: repeat(4, 1fr);
     }
 }
+
+
+.exam-paged .question-card {
+    display: none;
+}
+
+.exam-paged .question-card.active-question {
+    display: block;
+}
+
+.question-step-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: 22px;
+    padding: 18px;
+    box-shadow: 0 16px 40px rgba(8, 28, 21, 0.07);
+}
+
+.question-step-actions button {
+    min-width: 120px;
+}
+
+.question-step-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.question-step-indicator {
+    color: var(--text-muted);
+    font-weight: 900;
+    text-align: center;
+}
+
+.question-nav a.active {
+    background: var(--primary-green);
+    color: #ffffff;
+    border-color: var(--primary-green);
+}
+
+.question-nav a.answered {
+    background: #DCFCE7;
+    color: #166534;
+    border-color: #BBF7D0;
+}
+
+.question-nav a.active.answered {
+    background: var(--primary-green);
+    color: #ffffff;
+    border-color: var(--primary-green);
+}
+
+@media (max-width: 700px) {
+    .question-step-actions {
+        display: grid;
+        grid-template-columns: 1fr;
+    }
+
+    .question-step-actions button {
+        width: 100%;
+    }
+
+    .question-step-indicator {
+        order: -1;
+    }
+}
