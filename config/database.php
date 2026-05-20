@@ -1,5 +1,7 @@
 <?php
 
+date_default_timezone_set('Asia/Manila');
+
 define('APP_URL', '/proctorx');
 
 $host = "localhost";
@@ -16,6 +18,8 @@ try {
 
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
+
+    $pdo->exec("SET time_zone = '+08:00'");
 
 } catch (PDOException $e) {
     die("Database connection failed.");
