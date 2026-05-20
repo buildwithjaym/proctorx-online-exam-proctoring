@@ -15,6 +15,32 @@ function set_question_flash($type, $message)
     ];
 }
 
+function valid_question_type($questionType)
+{
+    return in_array($questionType, ['multiple_choice', 'true_false', 'identification', 'essay']);
+}
+
+function question_type_label($type)
+{
+    if ($type === 'multiple_choice') {
+        return 'Multiple Choice';
+    }
+
+    if ($type === 'true_false') {
+        return 'True or False';
+    }
+
+    if ($type === 'identification') {
+        return 'Identification';
+    }
+
+    if ($type === 'essay') {
+        return 'Essay';
+    }
+
+    return 'Question';
+}
+
 function recalculate_exam_total_points($pdo, $examId)
 {
     $stmt = $pdo->prepare("
@@ -36,17 +62,115 @@ function recalculate_exam_total_points($pdo, $examId)
 function collect_multiple_choices()
 {
     $choices = [];
+    $labels = ['A', 'B', 'C', 'D'];
 
     for ($i = 1; $i <= 4; $i++) {
         $key = 'choice_text_' . $i;
         $value = isset($_POST[$key]) ? clean_input($_POST[$key]) : '';
 
         if ($value !== '') {
-            $choices[$i] = $value;
+            $choices[$i] = [
+                'label' => $labels[$i - 1],
+                'text' => $value
+            ];
         }
     }
 
     return $choices;
+}
+
+function strip_choice_label($choiceText)
+{
+    if (preg_match('/^[A-D]\.\s(.+)$/', $choiceText, $matches)) {
+        return $matches[1];
+    }
+
+    return $choiceText;
+}
+
+function save_question_choices($pdo, $questionId, $questionType)
+{
+    if ($questionType === 'multiple_choice') {
+        $choices = collect_multiple_choices();
+        $correctChoice = isset($_POST['correct_choice']) ? (int) $_POST['correct_choice'] : 0;
+
+        if (count($choices) < 2) {
+            throw new Exception('Please provide at least two choices for this multiple choice question.');
+        }
+
+        if (!isset($choices[$correctChoice])) {
+            throw new Exception('Please select the correct answer for this multiple choice question.');
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO choices
+            (question_id, choice_text, is_correct, position)
+            VALUES (?, ?, ?, ?)
+        ");
+
+        foreach ($choices as $position => $choice) {
+            $isCorrect = $position === $correctChoice ? 1 : 0;
+            $choiceText = $choice['label'] . '. ' . $choice['text'];
+
+            $stmt->execute([
+                $questionId,
+                $choiceText,
+                $isCorrect,
+                $position
+            ]);
+        }
+    }
+
+    if ($questionType === 'true_false') {
+        $correctTf = isset($_POST['correct_tf']) ? clean_input($_POST['correct_tf']) : '';
+
+        if (!in_array($correctTf, ['true', 'false'])) {
+            throw new Exception('Please choose the correct True or False answer.');
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO choices
+            (question_id, choice_text, is_correct, position)
+            VALUES (?, ?, ?, ?)
+        ");
+
+        $stmt->execute([
+            $questionId,
+            'True',
+            $correctTf === 'true' ? 1 : 0,
+            1
+        ]);
+
+        $stmt->execute([
+            $questionId,
+            'False',
+            $correctTf === 'false' ? 1 : 0,
+            2
+        ]);
+    }
+
+    if ($questionType === 'identification') {
+        $correctIdentification = isset($_POST['correct_identification']) ? clean_input($_POST['correct_identification']) : '';
+
+        if ($correctIdentification === '') {
+            throw new Exception('Please enter the correct answer for this identification question.');
+        }
+
+        $stmt = $pdo->prepare("
+            INSERT INTO choices
+            (question_id, choice_text, is_correct, position)
+            VALUES (?, ?, 1, 1)
+        ");
+
+        $stmt->execute([
+            $questionId,
+            $correctIdentification
+        ]);
+    }
+
+    if ($questionType === 'essay') {
+        return;
+    }
 }
 
 $stmt = $pdo->prepare("
@@ -81,12 +205,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $points = isset($_POST['points']) ? (float) $_POST['points'] : 1;
 
         if ($questionText === '') {
-            set_question_flash('error', 'Question text is required.');
+            set_question_flash('error', 'Please write the question before saving.');
             redirect_to('teacher/questions.php?exam_id=' . $examId);
         }
 
-        if (!in_array($questionType, ['multiple_choice', 'true_false'])) {
-            set_question_flash('error', 'Invalid question type.');
+        if (!valid_question_type($questionType)) {
+            set_question_flash('error', 'Please select a valid question type.');
             redirect_to('teacher/questions.php?exam_id=' . $examId);
         }
 
@@ -121,69 +245,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $questionId = (int) $pdo->lastInsertId();
 
-            if ($questionType === 'multiple_choice') {
-                $choices = collect_multiple_choices();
-                $correctChoice = isset($_POST['correct_choice']) ? (int) $_POST['correct_choice'] : 0;
-
-                if (count($choices) < 2) {
-                    throw new Exception('At least two choices are required.');
-                }
-
-                if (!isset($choices[$correctChoice])) {
-                    throw new Exception('Please select a valid correct answer.');
-                }
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO choices
-                    (question_id, choice_text, is_correct, position)
-                    VALUES (?, ?, ?, ?)
-                ");
-
-                foreach ($choices as $choicePosition => $choiceText) {
-                    $isCorrect = $choicePosition === $correctChoice ? 1 : 0;
-
-                    $stmt->execute([
-                        $questionId,
-                        $choiceText,
-                        $isCorrect,
-                        $choicePosition
-                    ]);
-                }
-            }
-
-            if ($questionType === 'true_false') {
-                $correctTf = isset($_POST['correct_tf']) ? clean_input($_POST['correct_tf']) : '';
-
-                if (!in_array($correctTf, ['true', 'false'])) {
-                    throw new Exception('Please select the correct true/false answer.');
-                }
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO choices
-                    (question_id, choice_text, is_correct, position)
-                    VALUES (?, ?, ?, ?)
-                ");
-
-                $stmt->execute([
-                    $questionId,
-                    'True',
-                    $correctTf === 'true' ? 1 : 0,
-                    1
-                ]);
-
-                $stmt->execute([
-                    $questionId,
-                    'False',
-                    $correctTf === 'false' ? 1 : 0,
-                    2
-                ]);
-            }
-
+            save_question_choices($pdo, $questionId, $questionType);
             recalculate_exam_total_points($pdo, $examId);
 
             $pdo->commit();
 
-            set_question_flash('success', 'Question added successfully.');
+            set_question_flash('success', question_type_label($questionType) . ' question added successfully.');
         } catch (Exception $e) {
             $pdo->rollBack();
             set_question_flash('error', $e->getMessage());
@@ -216,12 +283,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if ($questionText === '') {
-            set_question_flash('error', 'Question text is required.');
+            set_question_flash('error', 'Please write the question before saving.');
             redirect_to('teacher/questions.php?exam_id=' . $examId);
         }
 
-        if (!in_array($questionType, ['multiple_choice', 'true_false'])) {
-            set_question_flash('error', 'Invalid question type.');
+        if (!valid_question_type($questionType)) {
+            set_question_flash('error', 'Please select a valid question type.');
             redirect_to('teacher/questions.php?exam_id=' . $examId);
         }
 
@@ -250,69 +317,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare("DELETE FROM choices WHERE question_id = ?");
             $stmt->execute([$questionId]);
 
-            if ($questionType === 'multiple_choice') {
-                $choices = collect_multiple_choices();
-                $correctChoice = isset($_POST['correct_choice']) ? (int) $_POST['correct_choice'] : 0;
-
-                if (count($choices) < 2) {
-                    throw new Exception('At least two choices are required.');
-                }
-
-                if (!isset($choices[$correctChoice])) {
-                    throw new Exception('Please select a valid correct answer.');
-                }
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO choices
-                    (question_id, choice_text, is_correct, position)
-                    VALUES (?, ?, ?, ?)
-                ");
-
-                foreach ($choices as $choicePosition => $choiceText) {
-                    $isCorrect = $choicePosition === $correctChoice ? 1 : 0;
-
-                    $stmt->execute([
-                        $questionId,
-                        $choiceText,
-                        $isCorrect,
-                        $choicePosition
-                    ]);
-                }
-            }
-
-            if ($questionType === 'true_false') {
-                $correctTf = isset($_POST['correct_tf']) ? clean_input($_POST['correct_tf']) : '';
-
-                if (!in_array($correctTf, ['true', 'false'])) {
-                    throw new Exception('Please select the correct true/false answer.');
-                }
-
-                $stmt = $pdo->prepare("
-                    INSERT INTO choices
-                    (question_id, choice_text, is_correct, position)
-                    VALUES (?, ?, ?, ?)
-                ");
-
-                $stmt->execute([
-                    $questionId,
-                    'True',
-                    $correctTf === 'true' ? 1 : 0,
-                    1
-                ]);
-
-                $stmt->execute([
-                    $questionId,
-                    'False',
-                    $correctTf === 'false' ? 1 : 0,
-                    2
-                ]);
-            }
-
+            save_question_choices($pdo, $questionId, $questionType);
             recalculate_exam_total_points($pdo, $examId);
 
             $pdo->commit();
 
-            set_question_flash('success', 'Question updated successfully.');
+            set_question_flash('success', question_type_label($questionType) . ' question updated successfully.');
         } catch (Exception $e) {
             $pdo->rollBack();
             set_question_flash('error', $e->getMessage());
@@ -353,7 +363,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             set_question_flash('success', 'Question deleted successfully.');
         } catch (PDOException $e) {
-            set_question_flash('error', 'Unable to delete this question because it may already have linked student answers.');
+            set_question_flash('error', 'This question already has linked student answers and cannot be deleted safely.');
         }
 
         redirect_to('teacher/questions.php?exam_id=' . $examId);
@@ -412,31 +422,25 @@ if (count($questions) > 0) {
 
 $totalQuestions = count($questions);
 
-$stmt = $pdo->prepare("
-    SELECT COALESCE(SUM(points), 0)
-    FROM questions
-    WHERE exam_id = ?
-");
+$stmt = $pdo->prepare("SELECT COALESCE(SUM(points), 0) FROM questions WHERE exam_id = ?");
 $stmt->execute([$examId]);
 $totalPoints = $stmt->fetchColumn();
 
-$stmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM questions
-    WHERE exam_id = ?
-    AND question_type = 'multiple_choice'
-");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM questions WHERE exam_id = ? AND question_type = 'multiple_choice'");
 $stmt->execute([$examId]);
 $totalMultipleChoice = (int) $stmt->fetchColumn();
 
-$stmt = $pdo->prepare("
-    SELECT COUNT(*)
-    FROM questions
-    WHERE exam_id = ?
-    AND question_type = 'true_false'
-");
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM questions WHERE exam_id = ? AND question_type = 'true_false'");
 $stmt->execute([$examId]);
 $totalTrueFalse = (int) $stmt->fetchColumn();
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM questions WHERE exam_id = ? AND question_type = 'identification'");
+$stmt->execute([$examId]);
+$totalIdentification = (int) $stmt->fetchColumn();
+
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM questions WHERE exam_id = ? AND question_type = 'essay'");
+$stmt->execute([$examId]);
+$totalEssay = (int) $stmt->fetchColumn();
 
 $pageTitle = 'Questions';
 $panelLabel = 'Teacher Panel';
@@ -448,7 +452,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 
 <section class="exam-summary-card">
     <div>
-        <span>Exam Questions</span>
+        <span>Exam Builder</span>
         <h2><?php echo e($exam['title']); ?></h2>
         <p><?php echo e($exam['subject']); ?></p>
     </div>
@@ -473,8 +477,18 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     </div>
 
     <div class="dashboard-card">
-        <span>True / False</span>
+        <span>True or False</span>
         <h3><?php echo e($totalTrueFalse); ?></h3>
+    </div>
+
+    <div class="dashboard-card">
+        <span>Identification</span>
+        <h3><?php echo e($totalIdentification); ?></h3>
+    </div>
+
+    <div class="dashboard-card">
+        <span>Essay</span>
+        <h3><?php echo e($totalEssay); ?></h3>
     </div>
 </section>
 
@@ -482,7 +496,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     <div class="section-heading">
         <div>
             <span>Question Bank</span>
-            <h2>Manage Exam Questions</h2>
+            <h2>Build clear, fair, and easy-to-answer exam questions</h2>
         </div>
 
         <button type="button" class="primary-action" data-open-modal="addQuestionModal">
@@ -499,7 +513,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     <?php endif; ?>
 
     <div class="table-toolbar">
-        <input type="text" id="questionSearch" placeholder="Search question text or type">
+        <input type="text" id="questionSearch" placeholder="Search by question text, type, or answer">
     </div>
 
     <div class="table-wrap">
@@ -510,8 +524,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <th>Question</th>
                     <th>Type</th>
                     <th>Points</th>
-                    <th>Correct Answer</th>
-                    <th>Choices</th>
+                    <th>Answer Guide</th>
+                    <th>Options</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -521,22 +535,28 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                         <?php
                             $questionId = (int) $question['id'];
                             $questionChoices = isset($choiceMap[$questionId]) ? $choiceMap[$questionId] : [];
-                            $correctAnswer = '';
-                            $choiceTexts = [];
+                            $answerGuide = '';
+                            $optionTexts = [];
                             $choiceData = [];
 
                             foreach ($questionChoices as $choice) {
-                                $choiceTexts[] = $choice['choice_text'];
+                                $optionTexts[] = $choice['choice_text'];
 
                                 if ((int) $choice['is_correct'] === 1) {
-                                    $correctAnswer = $choice['choice_text'];
+                                    $answerGuide = $choice['choice_text'];
                                 }
 
                                 $choiceData[] = [
                                     'text' => $choice['choice_text'],
+                                    'raw_text' => strip_choice_label($choice['choice_text']),
                                     'is_correct' => (int) $choice['is_correct'],
                                     'position' => (int) $choice['position']
                                 ];
+                            }
+
+                            if ($question['question_type'] === 'essay') {
+                                $answerGuide = 'Manual checking';
+                                $optionTexts = ['No correct answer required. Teacher will read and score the response.'];
                             }
 
                             $choiceJson = json_encode($choiceData);
@@ -548,13 +568,13 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                             </td>
                             <td>
                                 <span class="type-badge <?php echo e($question['question_type']); ?>">
-                                    <?php echo e(ucwords(str_replace('_', ' ', $question['question_type']))); ?>
+                                    <?php echo e(question_type_label($question['question_type'])); ?>
                                 </span>
                             </td>
                             <td><?php echo e($question['points']); ?></td>
-                            <td><?php echo e($correctAnswer); ?></td>
+                            <td><?php echo e($answerGuide); ?></td>
                             <td>
-                                <span class="choice-preview"><?php echo e(implode(' • ', $choiceTexts)); ?></span>
+                                <span class="choice-preview"><?php echo e(implode(' • ', $optionTexts)); ?></span>
                             </td>
                             <td>
                                 <div class="table-actions">
@@ -586,7 +606,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="7" class="empty-state">No questions added yet.</td>
+                        <td colspan="7" class="empty-state">No questions added yet. Start by adding your first exam question.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>
@@ -598,8 +618,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     <div class="modal-card large-modal">
         <div class="modal-header">
             <div>
-                <span>New Question</span>
-                <h3>Add Question</h3>
+                <span>Create Question</span>
+                <h3>Add a new exam question</h3>
             </div>
             <button type="button" class="modal-close" data-close-modal>&times;</button>
         </div>
@@ -609,8 +629,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
             <input type="hidden" name="action" value="create">
 
             <div class="form-group">
-                <label for="add_question_text">Question Text</label>
-                <textarea id="add_question_text" name="question_text" required></textarea>
+                <label for="add_question_text">Question</label>
+                <textarea id="add_question_text" name="question_text" placeholder="Write the question exactly as the student should see it." required></textarea>
             </div>
 
             <div class="form-grid-2">
@@ -618,7 +638,9 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <label for="add_question_type">Question Type</label>
                     <select id="add_question_type" name="question_type" data-question-type="add">
                         <option value="multiple_choice">Multiple Choice</option>
-                        <option value="true_false">True / False</option>
+                        <option value="true_false">True or False</option>
+                        <option value="identification">Identification</option>
+                        <option value="essay">Essay</option>
                     </select>
                 </div>
 
@@ -629,21 +651,27 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
             </div>
 
             <div id="add_multiple_choice_box" class="choice-box">
-                <span class="choice-box-title">Choices</span>
+                <span class="choice-box-title">Multiple Choice Options</span>
+                <p class="question-note">Add up to four choices. Select the correct answer using A, B, C, or D.</p>
 
-                <?php for ($i = 1; $i <= 4; $i++): ?>
-                    <div class="choice-row">
-                        <label>
+                <?php
+                    $labels = ['A', 'B', 'C', 'D'];
+                    for ($i = 1; $i <= 4; $i++):
+                ?>
+                    <div class="choice-row abcd-row">
+                        <label class="choice-letter"><?php echo e($labels[$i - 1]); ?></label>
+                        <input type="text" name="choice_text_<?php echo e($i); ?>" placeholder="Option <?php echo e($labels[$i - 1]); ?>">
+                        <label class="correct-radio">
                             <input type="radio" name="correct_choice" value="<?php echo e($i); ?>" <?php echo $i === 1 ? 'checked' : ''; ?>>
                             Correct
                         </label>
-                        <input type="text" name="choice_text_<?php echo e($i); ?>" placeholder="Choice <?php echo e($i); ?>">
                     </div>
                 <?php endfor; ?>
             </div>
 
             <div id="add_true_false_box" class="choice-box hidden">
-                <span class="choice-box-title">Correct Answer</span>
+                <span class="choice-box-title">True or False Answer</span>
+                <p class="question-note">Choose the correct answer for this statement.</p>
 
                 <label class="check-row">
                     <input type="radio" name="correct_tf" value="true" checked>
@@ -654,6 +682,21 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <input type="radio" name="correct_tf" value="false">
                     <span>False</span>
                 </label>
+            </div>
+
+            <div id="add_identification_box" class="choice-box hidden">
+                <span class="choice-box-title">Identification Answer</span>
+                <p class="question-note">Students will type one answer. Provide the expected correct answer here.</p>
+
+                <div class="form-group no-margin">
+                    <label for="add_correct_identification">Correct Answer</label>
+                    <input type="text" id="add_correct_identification" name="correct_identification" placeholder="Example: Photosynthesis">
+                </div>
+            </div>
+
+            <div id="add_essay_box" class="choice-box hidden">
+                <span class="choice-box-title">Essay Response</span>
+                <p class="question-note">No correct answer is required. Students will write their response freely, and the teacher will read and score it manually.</p>
             </div>
 
             <div class="form-actions">
@@ -669,7 +712,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
         <div class="modal-header">
             <div>
                 <span>Edit Question</span>
-                <h3>Update Question</h3>
+                <h3>Update exam question</h3>
             </div>
             <button type="button" class="modal-close" data-close-modal>&times;</button>
         </div>
@@ -680,7 +723,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
             <input type="hidden" name="question_id" id="edit_question_id">
 
             <div class="form-group">
-                <label for="edit_question_text">Question Text</label>
+                <label for="edit_question_text">Question</label>
                 <textarea id="edit_question_text" name="question_text" required></textarea>
             </div>
 
@@ -689,7 +732,9 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <label for="edit_question_type">Question Type</label>
                     <select id="edit_question_type" name="question_type" data-question-type="edit">
                         <option value="multiple_choice">Multiple Choice</option>
-                        <option value="true_false">True / False</option>
+                        <option value="true_false">True or False</option>
+                        <option value="identification">Identification</option>
+                        <option value="essay">Essay</option>
                     </select>
                 </div>
 
@@ -700,21 +745,27 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
             </div>
 
             <div id="edit_multiple_choice_box" class="choice-box">
-                <span class="choice-box-title">Choices</span>
+                <span class="choice-box-title">Multiple Choice Options</span>
+                <p class="question-note">Edit the choices and mark the correct answer.</p>
 
-                <?php for ($i = 1; $i <= 4; $i++): ?>
-                    <div class="choice-row">
-                        <label>
+                <?php
+                    $labels = ['A', 'B', 'C', 'D'];
+                    for ($i = 1; $i <= 4; $i++):
+                ?>
+                    <div class="choice-row abcd-row">
+                        <label class="choice-letter"><?php echo e($labels[$i - 1]); ?></label>
+                        <input type="text" name="choice_text_<?php echo e($i); ?>" id="edit_choice_text_<?php echo e($i); ?>" placeholder="Option <?php echo e($labels[$i - 1]); ?>">
+                        <label class="correct-radio">
                             <input type="radio" name="correct_choice" value="<?php echo e($i); ?>" id="edit_correct_choice_<?php echo e($i); ?>">
                             Correct
                         </label>
-                        <input type="text" name="choice_text_<?php echo e($i); ?>" id="edit_choice_text_<?php echo e($i); ?>" placeholder="Choice <?php echo e($i); ?>">
                     </div>
                 <?php endfor; ?>
             </div>
 
             <div id="edit_true_false_box" class="choice-box hidden">
-                <span class="choice-box-title">Correct Answer</span>
+                <span class="choice-box-title">True or False Answer</span>
+                <p class="question-note">Choose the correct answer for this statement.</p>
 
                 <label class="check-row">
                     <input type="radio" name="correct_tf" value="true" id="edit_correct_tf_true">
@@ -725,6 +776,21 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
                     <input type="radio" name="correct_tf" value="false" id="edit_correct_tf_false">
                     <span>False</span>
                 </label>
+            </div>
+
+            <div id="edit_identification_box" class="choice-box hidden">
+                <span class="choice-box-title">Identification Answer</span>
+                <p class="question-note">Students will type one answer. Provide the expected correct answer here.</p>
+
+                <div class="form-group no-margin">
+                    <label for="edit_correct_identification">Correct Answer</label>
+                    <input type="text" id="edit_correct_identification" name="correct_identification" placeholder="Expected answer">
+                </div>
+            </div>
+
+            <div id="edit_essay_box" class="choice-box hidden">
+                <span class="choice-box-title">Essay Response</span>
+                <p class="question-note">No correct answer is required. Students will write their response freely, and the teacher will read and score it manually.</p>
             </div>
 
             <div class="form-actions">
@@ -755,7 +821,7 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
             </p>
 
             <div class="modal-note danger-note">
-                This will also remove its choices.
+                This will also remove the answer guide or choices connected to this question.
             </div>
 
             <div class="delete-question-preview" id="delete_question_text"></div>
@@ -768,6 +834,6 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
     </div>
 </div>
 
-<script src="<?php echo e(app_url('assets/js/questions.js')); ?>"></script>
+<script src="<?php echo e(app_url('assets/js/questions.js?V-3')); ?>"></script>
 
 <?php require_once __DIR__ . '/../includes/dashboard_footer.php'; ?>

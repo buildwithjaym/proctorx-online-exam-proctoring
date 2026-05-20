@@ -1,4 +1,4 @@
-(function () {
+document.addEventListener("DOMContentLoaded", function () {
     var openButtons = document.querySelectorAll("[data-open-modal]");
     var closeButtons = document.querySelectorAll("[data-close-modal]");
     var editButtons = document.querySelectorAll("[data-open-edit]");
@@ -26,21 +26,54 @@
         document.body.classList.remove("modal-open");
     }
 
+    function hideBox(id) {
+        var box = document.getElementById(id);
+
+        if (box) {
+            box.style.display = "none";
+            box.classList.add("hidden");
+        }
+    }
+
+    function showBox(id) {
+        var box = document.getElementById(id);
+
+        if (box) {
+            box.style.display = "grid";
+            box.classList.remove("hidden");
+        }
+    }
+
+    function hideQuestionBoxes(prefix) {
+        hideBox(prefix + "_multiple_choice_box");
+        hideBox(prefix + "_true_false_box");
+        hideBox(prefix + "_identification_box");
+        hideBox(prefix + "_essay_box");
+    }
+
     function syncQuestionType(prefix) {
         var selector = document.getElementById(prefix + "_question_type");
-        var multipleBox = document.getElementById(prefix + "_multiple_choice_box");
-        var trueFalseBox = document.getElementById(prefix + "_true_false_box");
 
-        if (!selector || !multipleBox || !trueFalseBox) {
+        if (!selector) {
             return;
         }
 
+        hideQuestionBoxes(prefix);
+
+        if (selector.value === "multiple_choice") {
+            showBox(prefix + "_multiple_choice_box");
+        }
+
         if (selector.value === "true_false") {
-            multipleBox.classList.add("hidden");
-            trueFalseBox.classList.remove("hidden");
-        } else {
-            multipleBox.classList.remove("hidden");
-            trueFalseBox.classList.add("hidden");
+            showBox(prefix + "_true_false_box");
+        }
+
+        if (selector.value === "identification") {
+            showBox(prefix + "_identification_box");
+        }
+
+        if (selector.value === "essay") {
+            showBox(prefix + "_essay_box");
         }
     }
 
@@ -60,6 +93,7 @@
 
         var trueRadio = document.getElementById("edit_correct_tf_true");
         var falseRadio = document.getElementById("edit_correct_tf_false");
+        var identificationInput = document.getElementById("edit_correct_identification");
 
         if (trueRadio) {
             trueRadio.checked = true;
@@ -67,6 +101,10 @@
 
         if (falseRadio) {
             falseRadio.checked = false;
+        }
+
+        if (identificationInput) {
+            identificationInput.value = "";
         }
     }
 
@@ -78,9 +116,10 @@
                 var position = parseInt(choices[i].position, 10);
                 var choiceInput = document.getElementById("edit_choice_text_" + position);
                 var correctInput = document.getElementById("edit_correct_choice_" + position);
+                var text = choices[i].raw_text ? choices[i].raw_text : choices[i].text;
 
                 if (choiceInput) {
-                    choiceInput.value = choices[i].text;
+                    choiceInput.value = text;
                 }
 
                 if (correctInput && parseInt(choices[i].is_correct, 10) === 1) {
@@ -91,40 +130,53 @@
 
         if (questionType === "true_false") {
             for (var j = 0; j < choices.length; j++) {
-                var text = String(choices[j].text).toLowerCase();
-                var isCorrect = parseInt(choices[j].is_correct, 10) === 1;
+                var tfText = String(choices[j].text).toLowerCase();
+                var tfCorrect = parseInt(choices[j].is_correct, 10) === 1;
 
-                if (text === "true" && isCorrect) {
+                if (tfText === "true" && tfCorrect) {
                     document.getElementById("edit_correct_tf_true").checked = true;
                 }
 
-                if (text === "false" && isCorrect) {
+                if (tfText === "false" && tfCorrect) {
                     document.getElementById("edit_correct_tf_false").checked = true;
+                }
+            }
+        }
+
+        if (questionType === "identification") {
+            for (var k = 0; k < choices.length; k++) {
+                if (parseInt(choices[k].is_correct, 10) === 1) {
+                    var identificationInput = document.getElementById("edit_correct_identification");
+
+                    if (identificationInput) {
+                        identificationInput.value = choices[k].text;
+                    }
                 }
             }
         }
     }
 
-    for (var i = 0; i < openButtons.length; i++) {
-        openButtons[i].addEventListener("click", function () {
+    for (var a = 0; a < openButtons.length; a++) {
+        openButtons[a].addEventListener("click", function () {
             openModal(this.getAttribute("data-open-modal"));
+            syncQuestionType("add");
         });
     }
 
-    for (var j = 0; j < closeButtons.length; j++) {
-        closeButtons[j].addEventListener("click", function () {
+    for (var b = 0; b < closeButtons.length; b++) {
+        closeButtons[b].addEventListener("click", function () {
             closeModals();
         });
     }
 
-    for (var k = 0; k < typeSelectors.length; k++) {
-        typeSelectors[k].addEventListener("change", function () {
+    for (var c = 0; c < typeSelectors.length; c++) {
+        typeSelectors[c].addEventListener("change", function () {
             syncQuestionType(this.getAttribute("data-question-type"));
         });
     }
 
-    for (var l = 0; l < editButtons.length; l++) {
-        editButtons[l].addEventListener("click", function () {
+    for (var d = 0; d < editButtons.length; d++) {
+        editButtons[d].addEventListener("click", function () {
             var choices = [];
 
             try {
@@ -145,8 +197,8 @@
         });
     }
 
-    for (var m = 0; m < deleteButtons.length; m++) {
-        deleteButtons[m].addEventListener("click", function () {
+    for (var e = 0; e < deleteButtons.length; e++) {
+        deleteButtons[e].addEventListener("click", function () {
             document.getElementById("delete_question_id").value = this.getAttribute("data-id");
             document.getElementById("delete_question_text").textContent = this.getAttribute("data-text");
             openModal("deleteQuestionModal");
@@ -155,8 +207,8 @@
 
     var modalBackdrops = document.querySelectorAll(".modal-backdrop");
 
-    for (var n = 0; n < modalBackdrops.length; n++) {
-        modalBackdrops[n].addEventListener("click", function (event) {
+    for (var f = 0; f < modalBackdrops.length; f++) {
+        modalBackdrops[f].addEventListener("click", function (event) {
             if (event.target === this) {
                 closeModals();
             }
@@ -174,13 +226,13 @@
             var filter = questionSearch.value.toLowerCase();
             var rows = questionsTable.querySelectorAll("tbody tr");
 
-            for (var p = 0; p < rows.length; p++) {
-                var rowText = rows[p].textContent.toLowerCase();
+            for (var g = 0; g < rows.length; g++) {
+                var rowText = rows[g].textContent.toLowerCase();
 
                 if (rowText.indexOf(filter) > -1) {
-                    rows[p].style.display = "";
+                    rows[g].style.display = "";
                 } else {
-                    rows[p].style.display = "none";
+                    rows[g].style.display = "none";
                 }
             }
         });
@@ -188,4 +240,4 @@
 
     syncQuestionType("add");
     syncQuestionType("edit");
-})();
+});

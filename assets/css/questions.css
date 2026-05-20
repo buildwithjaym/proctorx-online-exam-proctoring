@@ -367,3 +367,58 @@
         width: 100%;
     }
 }
+
+.hidden {
+    display: none !important;
+}
+
+.no-margin {
+    margin-bottom: 0;
+}
+
+.question-note {
+    margin: 0 0 8px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.abcd-row {
+    grid-template-columns: 44px 1fr 94px;
+}
+
+.choice-letter {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+    background: var(--primary-green);
+    color: #ffffff;
+    display: grid;
+    place-items: center;
+    font-weight: 900;
+}
+
+.correct-radio {
+    justify-content: flex-start;
+    color: var(--secondary-green);
+}
+
+.type-badge.identification {
+    background: #F3E8FF;
+    color: #6B21A8;
+}
+
+.type-badge.essay {
+    background: #ECFDF5;
+    color: #047857;
+}
+
+@media (max-width: 700px) {
+    .abcd-row {
+        grid-template-columns: 1fr;
+    }
+
+    .choice-letter {
+        width: 100%;
+    }
+}
