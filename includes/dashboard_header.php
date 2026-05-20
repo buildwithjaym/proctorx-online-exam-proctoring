@@ -16,6 +16,8 @@ if (!isset($extraStyles)) {
     $extraStyles = [];
 }
 
+
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
