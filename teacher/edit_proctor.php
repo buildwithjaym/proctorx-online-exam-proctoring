@@ -11,22 +11,22 @@ $stmt = $pdo->prepare("
     SELECT id, full_name, email, username, status
     FROM users
     WHERE id = ?
-    AND role = 'student'
+    AND role = 'proctor'
     AND created_by = ?
     LIMIT 1
 ");
 $stmt->execute([$id, $teacherId]);
-$student = $stmt->fetch();
+$proctor = $stmt->fetch();
 
-if (!$student) {
-    redirect_to('teacher/students.php');
+if (!$proctor) {
+    redirect_to('teacher/proctors.php');
 }
 
 $error = '';
-$fullName = $student['full_name'];
-$email = $student['email'];
-$username = $student['username'];
-$status = $student['status'];
+$fullName = $proctor['full_name'];
+$email = $proctor['email'];
+$username = $proctor['username'];
+$status = $proctor['status'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = isset($_POST['full_name']) ? clean_input($_POST['full_name']) : '';
@@ -75,7 +75,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UPDATE users
                     SET full_name = ?, email = ?, username = ?, password_hash = ?, status = ?
                     WHERE id = ?
-                    AND role = 'student'
+                    AND role = 'proctor'
                     AND created_by = ?
                 ");
 
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     UPDATE users
                     SET full_name = ?, email = ?, username = ?, status = ?
                     WHERE id = ?
-                    AND role = 'student'
+                    AND role = 'proctor'
                     AND created_by = ?
                 ");
 
@@ -107,14 +107,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
             }
 
-            redirect_to('teacher/students.php?updated=1');
+            redirect_to('teacher/proctors.php?updated=1');
         }
     }
 }
 
-$pageTitle = 'Edit Student';
+$pageTitle = 'Edit Proctor';
 $panelLabel = 'Teacher Panel';
-$activePage = 'students';
+$activePage = 'proctors';
 
 require_once __DIR__ . '/../includes/dashboard_header.php';
 ?>
@@ -122,8 +122,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 <section class="content-card narrow-card">
     <div class="section-heading">
         <div>
-            <span>Student Management</span>
-            <h2>Edit Student Account</h2>
+            <span>Proctor Management</span>
+            <h2>Edit Proctor Account</h2>
         </div>
     </div>
 
@@ -169,8 +169,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
         </div>
 
         <div class="form-actions">
-            <a href="students.php" class="secondary-action">Cancel</a>
-            <button type="submit" class="primary-button">Update Student</button>
+            <a href="proctors.php" class="secondary-action">Cancel</a>
+            <button type="submit" class="primary-button">Update Proctor</button>
         </div>
     </form>
 </section>

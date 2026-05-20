@@ -4,29 +4,11 @@ require_once __DIR__ . '/../includes/auth.php';
 
 require_role('teacher');
 
-$teacherId = current_user_id();
-$id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-
-$stmt = $pdo->prepare("
-    SELECT id, full_name, email, username, status
-    FROM users
-    WHERE id = ?
-    AND role = 'student'
-    AND created_by = ?
-    LIMIT 1
-");
-$stmt->execute([$id, $teacherId]);
-$student = $stmt->fetch();
-
-if (!$student) {
-    redirect_to('teacher/students.php');
-}
-
 $error = '';
-$fullName = $student['full_name'];
-$email = $student['email'];
-$username = $student['username'];
-$status = $student['status'];
+$fullName = '';
+$email = '';
+$username = '';
+$status = 'active';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullName = isset($_POST['full_name']) ? clean_input($_POST['full_name']) : '';
@@ -36,27 +18,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $confirmPassword = isset($_POST['confirm_password']) ? $_POST['confirm_password'] : '';
     $status = isset($_POST['status']) ? clean_input($_POST['status']) : 'active';
 
-    if ($fullName === '' || $username === '') {
+    if ($fullName === '' || $username === '' || $password === '' || $confirmPassword === '') {
         $error = 'Please fill in all required fields.';
     } elseif ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = 'Please enter a valid email address.';
-    } elseif ($password !== '' && strlen($password) < 6) {
+    } elseif (strlen($password) < 6) {
         $error = 'Password must be at least 6 characters.';
-    } elseif ($password !== '' && $password !== $confirmPassword) {
+    } elseif ($password !== $confirmPassword) {
         $error = 'Passwords do not match.';
     } elseif (!in_array($status, ['active', 'inactive', 'suspended'])) {
         $error = 'Invalid account status.';
     } else {
-        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? AND id != ? LIMIT 1");
-        $stmt->execute([$username, $id]);
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? LIMIT 1");
+        $stmt->execute([$username]);
         $existingUsername = $stmt->fetch();
 
         if ($existingUsername) {
             $error = 'Username is already taken.';
         } else {
             if ($email !== '') {
-                $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ? LIMIT 1");
-                $stmt->execute([$email, $id]);
+                $stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? LIMIT 1");
+                $stmt->execute([$email]);
                 $existingEmail = $stmt->fetch();
 
                 if ($existingEmail) {
@@ -67,54 +49,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($error === '') {
             $emailValue = $email === '' ? null : $email;
+            $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-            if ($password !== '') {
-                $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+            $stmt = $pdo->prepare("
+                INSERT INTO users 
+                (full_name, email, username, password_hash, role, status, created_by)
+                VALUES (?, ?, ?, ?, 'proctor', ?, ?)
+            ");
 
-                $stmt = $pdo->prepare("
-                    UPDATE users
-                    SET full_name = ?, email = ?, username = ?, password_hash = ?, status = ?
-                    WHERE id = ?
-                    AND role = 'student'
-                    AND created_by = ?
-                ");
+            $stmt->execute([
+                $fullName,
+                $emailValue,
+                $username,
+                $passwordHash,
+                $status,
+                current_user_id()
+            ]);
 
-                $stmt->execute([
-                    $fullName,
-                    $emailValue,
-                    $username,
-                    $passwordHash,
-                    $status,
-                    $id,
-                    $teacherId
-                ]);
-            } else {
-                $stmt = $pdo->prepare("
-                    UPDATE users
-                    SET full_name = ?, email = ?, username = ?, status = ?
-                    WHERE id = ?
-                    AND role = 'student'
-                    AND created_by = ?
-                ");
-
-                $stmt->execute([
-                    $fullName,
-                    $emailValue,
-                    $username,
-                    $status,
-                    $id,
-                    $teacherId
-                ]);
-            }
-
-            redirect_to('teacher/students.php?updated=1');
+            redirect_to('teacher/proctors.php?created=1');
         }
     }
 }
 
-$pageTitle = 'Edit Student';
+$pageTitle = 'Add Proctor';
 $panelLabel = 'Teacher Panel';
-$activePage = 'students';
+$activePage = 'proctors';
 
 require_once __DIR__ . '/../includes/dashboard_header.php';
 ?>
@@ -122,8 +81,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 <section class="content-card narrow-card">
     <div class="section-heading">
         <div>
-            <span>Student Management</span>
-            <h2>Edit Student Account</h2>
+            <span>Proctor Management</span>
+            <h2>Create Proctor Account</h2>
         </div>
     </div>
 
@@ -149,13 +108,13 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
 
         <div class="form-grid-2">
             <div class="form-group">
-                <label for="password">New Password</label>
-                <input type="password" id="password" name="password">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required>
             </div>
 
             <div class="form-group">
-                <label for="confirm_password">Confirm New Password</label>
-                <input type="password" id="confirm_password" name="confirm_password">
+                <label for="confirm_password">Confirm Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required>
             </div>
         </div>
 
@@ -169,8 +128,8 @@ require_once __DIR__ . '/../includes/dashboard_header.php';
         </div>
 
         <div class="form-actions">
-            <a href="students.php" class="secondary-action">Cancel</a>
-            <button type="submit" class="primary-button">Update Student</button>
+            <a href="proctors.php" class="secondary-action">Cancel</a>
+            <button type="submit" class="primary-button">Create Proctor</button>
         </div>
     </form>
 </section>
