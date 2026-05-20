@@ -16,8 +16,6 @@ if (!isset($extraStyles)) {
     $extraStyles = [];
 }
 
-
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -33,10 +31,25 @@ if (!isset($extraStyles)) {
 </head>
 <body>
 
-<div class="dashboard-shell">
+<div class="dashboard-shell" id="dashboardShell">
+    <div class="mobile-backdrop" id="mobileBackdrop"></div>
+
     <?php require __DIR__ . '/sidebar.php'; ?>
 
     <main class="dashboard-main">
+        <div class="mobile-topbar">
+            <button type="button" class="menu-toggle" id="menuToggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+            <div class="mobile-brand">
+                <div class="brand-mark tiny">PX</div>
+                <strong>ProctorX</strong>
+            </div>
+        </div>
+
         <header class="dashboard-topbar">
             <div>
                 <span><?php echo e($panelLabel); ?></span>
