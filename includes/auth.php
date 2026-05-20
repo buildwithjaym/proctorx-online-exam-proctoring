@@ -64,16 +64,48 @@ function require_role($roles)
         $roles = [$roles];
     }
 
-    if (!in_array(current_user_role(), $roles)) {
-        redirect_to(role_dashboard(current_user_role()));
+    $currentRole = current_user_role();
+
+    if (!in_array($currentRole, $roles)) {
+        if ($currentRole === 'teacher') {
+            redirect_to('teacher/dashboard.php');
+        }
+
+        if ($currentRole === 'student') {
+            redirect_to('student/dashboard.php');
+        }
+
+        if ($currentRole === 'proctor') {
+            redirect_to('proctor/dashboard.php');
+        }
+
+        logout_user();
+        redirect_to('login.php');
     }
 }
 
 function redirect_if_authenticated()
 {
-    if (is_logged_in()) {
-        redirect_to(role_dashboard(current_user_role()));
+    if (!is_logged_in()) {
+        return;
     }
+
+    $role = current_user_role();
+
+    if ($role === 'teacher') {
+        redirect_to('teacher/dashboard.php');
+    }
+
+    if ($role === 'student') {
+        redirect_to('student/dashboard.php');
+    }
+
+    if ($role === 'proctor') {
+        redirect_to('proctor/dashboard.php');
+    }
+
+    logout_user();
+    redirect_to('login.php');
 }
 
 function logout_user()

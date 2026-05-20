@@ -25,7 +25,7 @@ $role = current_user_role();
         <?php if ($role === 'student'): ?>
             <a class="<?php echo $activePage === 'dashboard' ? 'active' : ''; ?>" href="<?php echo e(app_url('student/dashboard.php')); ?>">Dashboard</a>
             <a class="<?php echo $activePage === 'exams' ? 'active' : ''; ?>" href="<?php echo e(app_url('student/exams.php')); ?>">Assigned Exams</a>
-            <a class="<?php echo $activePage === 'results' ? 'active' : ''; ?>" href="<?php echo e(app_url('student/result.php')); ?>">Results</a>
+            <a class="<?php echo $activePage === 'results' ? 'active' : ''; ?>" href="<?php echo e(app_url('student/exams.php')); ?>">Results</a>
         <?php endif; ?>
 
         <?php if ($role === 'proctor'): ?>

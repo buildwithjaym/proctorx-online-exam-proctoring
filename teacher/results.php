@@ -5,51 +5,14 @@ require_once __DIR__ . '/../includes/auth.php';
 require_role('teacher');
 
 $teacherId = current_user_id();
-$attemptId = isset($_GET['attempt_id']) ? (int) $_GET['attempt_id'] : 0;
 
-function review_question_label($type)
-{
-    if ($type === 'multiple_choice') {
-        return 'Multiple Choice';
-    }
-
-    if ($type === 'true_false') {
-        return 'True or False';
-    }
-
-    if ($type === 'identification') {
-        return 'Identification';
-    }
-
-    if ($type === 'essay') {
-        return 'Essay';
-    }
-
-    return 'Question';
-}
-
-function review_normalize_answer($value)
-{
-    $value = strtolower(trim($value));
-    $value = preg_replace('/\s+/', ' ', $value);
-    return $value;
-}
-
-function review_percent($score, $total)
+function result_percent($score, $total)
 {
     if ((float) $total <= 0) {
         return 0;
     }
 
     return round(((float) $score / (float) $total) * 100, 1);
-}
-
-function set_review_flash($type, $message)
-{
-    $_SESSION['review_flash'] = [
-        'type' => $type,
-        'message' => $message
-    ];
 }
 
 $stmt = $pdo->prepare("
@@ -66,215 +29,54 @@ $stmt = $pdo->prepare("
         ea.submitted_at,
         e.title,
         e.subject,
-        e.description,
         u.full_name,
         u.username,
-        u.email
+        (
+            SELECT COUNT(*)
+            FROM questions q
+            WHERE q.exam_id = e.id
+        ) AS question_count,
+        (
+            SELECT COUNT(*)
+            FROM questions q
+            WHERE q.exam_id = e.id
+            AND q.question_type = 'essay'
+        ) AS essay_count
     FROM exam_attempts ea
     INNER JOIN exams e ON ea.exam_id = e.id
     INNER JOIN users u ON ea.student_id = u.id
-    WHERE ea.id = ?
-    AND e.teacher_id = ?
+    WHERE e.teacher_id = ?
     AND ea.attempt_status IN ('submitted', 'auto_submitted')
-    LIMIT 1
+    ORDER BY ea.submitted_at DESC
 ");
-$stmt->execute([$attemptId, $teacherId]);
-$attempt = $stmt->fetch();
+$stmt->execute([$teacherId]);
+$attempts = $stmt->fetchAll();
 
-if (!$attempt) {
-    redirect_to('teacher/results.php');
-}
+$totalSubmitted = count($attempts);
+$underReview = 0;
+$flagged = 0;
+$cleared = 0;
+$invalidated = 0;
 
-$examId = (int) $attempt['exam_id'];
+foreach ($attempts as $attempt) {
+    if ($attempt['review_status'] === 'under_review') {
+        $underReview++;
+    }
 
-$stmt = $pdo->prepare("
-    SELECT id, question_text, question_type, points, position
-    FROM questions
-    WHERE exam_id = ?
-    ORDER BY position ASC, id ASC
-");
-$stmt->execute([$examId]);
-$questions = $stmt->fetchAll();
+    if ($attempt['review_status'] === 'flagged') {
+        $flagged++;
+    }
 
-$questionIds = [];
+    if ($attempt['review_status'] === 'cleared' || $attempt['review_status'] === 'normal') {
+        $cleared++;
+    }
 
-foreach ($questions as $question) {
-    $questionIds[] = (int) $question['id'];
-}
-
-$choiceMap = [];
-$correctChoiceMap = [];
-
-if (count($questionIds) > 0) {
-    $placeholders = implode(',', array_fill(0, count($questionIds), '?'));
-
-    $stmt = $pdo->prepare("
-        SELECT id, question_id, choice_text, is_correct, position
-        FROM choices
-        WHERE question_id IN ($placeholders)
-        ORDER BY question_id ASC, position ASC
-    ");
-    $stmt->execute($questionIds);
-    $choices = $stmt->fetchAll();
-
-    foreach ($choices as $choice) {
-        $qid = (int) $choice['question_id'];
-
-        if (!isset($choiceMap[$qid])) {
-            $choiceMap[$qid] = [];
-        }
-
-        $choiceMap[$qid][] = $choice;
-
-        if ((int) $choice['is_correct'] === 1) {
-            $correctChoiceMap[$qid] = $choice;
-        }
+    if ($attempt['review_status'] === 'invalidated') {
+        $invalidated++;
     }
 }
 
-$stmt = $pdo->prepare("
-    SELECT id, question_id, choice_id, answer_text, points_awarded, teacher_feedback, checked_at
-    FROM student_answers
-    WHERE attempt_id = ?
-");
-$stmt->execute([$attemptId]);
-$answerRows = $stmt->fetchAll();
-
-$answerMap = [];
-
-foreach ($answerRows as $answer) {
-    $answerMap[(int) $answer['question_id']] = $answer;
-}
-
-$token = csrf_token();
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $postedToken = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
-    $action = isset($_POST['action']) ? clean_input($_POST['action']) : '';
-
-    if (!verify_csrf_token($postedToken)) {
-        set_review_flash('error', 'Invalid request. Please try again.');
-        redirect_to('teacher/review_attempt.php?attempt_id=' . $attemptId);
-    }
-
-    if ($action === 'save_review') {
-        $manualScores = isset($_POST['manual_scores']) && is_array($_POST['manual_scores']) ? $_POST['manual_scores'] : [];
-        $feedbacks = isset($_POST['feedbacks']) && is_array($_POST['feedbacks']) ? $_POST['feedbacks'] : [];
-        $reviewStatus = isset($_POST['review_status']) ? clean_input($_POST['review_status']) : 'cleared';
-
-        if (!in_array($reviewStatus, ['normal', 'flagged', 'under_review', 'cleared', 'invalidated'])) {
-            $reviewStatus = 'cleared';
-        }
-
-        $autoScore = 0;
-        $manualScore = 0;
-
-        try {
-            $pdo->beginTransaction();
-
-            foreach ($questions as $question) {
-                $qid = (int) $question['id'];
-                $questionType = $question['question_type'];
-                $points = (float) $question['points'];
-                $answer = isset($answerMap[$qid]) ? $answerMap[$qid] : null;
-
-                if ($questionType === 'multiple_choice' || $questionType === 'true_false') {
-                    if ($answer && $answer['choice_id']) {
-                        $selectedChoiceId = (int) $answer['choice_id'];
-
-                        if (isset($choiceMap[$qid])) {
-                            foreach ($choiceMap[$qid] as $choice) {
-                                if ((int) $choice['id'] === $selectedChoiceId && (int) $choice['is_correct'] === 1) {
-                                    $autoScore += $points;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if ($questionType === 'identification') {
-                    $studentAnswer = $answer ? $answer['answer_text'] : '';
-                    $correctAnswer = isset($correctChoiceMap[$qid]) ? $correctChoiceMap[$qid]['choice_text'] : '';
-
-                    if ($studentAnswer !== '' && review_normalize_answer($studentAnswer) === review_normalize_answer($correctAnswer)) {
-                        $autoScore += $points;
-                    }
-                }
-
-                if ($questionType === 'essay') {
-                    $scoreValue = isset($manualScores[$qid]) ? (float) $manualScores[$qid] : 0;
-                    $feedbackValue = isset($feedbacks[$qid]) ? clean_input($feedbacks[$qid]) : '';
-
-                    if ($scoreValue < 0) {
-                        $scoreValue = 0;
-                    }
-
-                    if ($scoreValue > $points) {
-                        $scoreValue = $points;
-                    }
-
-                    $manualScore += $scoreValue;
-
-                    if ($answer) {
-                        $stmt = $pdo->prepare("
-                            UPDATE student_answers
-                            SET points_awarded = ?, teacher_feedback = ?, checked_at = NOW()
-                            WHERE id = ?
-                        ");
-                        $stmt->execute([
-                            $scoreValue,
-                            $feedbackValue,
-                            $answer['id']
-                        ]);
-                    } else {
-                        $stmt = $pdo->prepare("
-                            INSERT INTO student_answers
-                            (attempt_id, question_id, choice_id, answer_text, points_awarded, teacher_feedback, checked_at)
-                            VALUES (?, ?, NULL, '', ?, ?, NOW())
-                        ");
-                        $stmt->execute([
-                            $attemptId,
-                            $qid,
-                            $scoreValue,
-                            $feedbackValue
-                        ]);
-                    }
-                }
-            }
-
-            $finalScore = $autoScore + $manualScore;
-
-            $stmt = $pdo->prepare("
-                UPDATE exam_attempts
-                SET score = ?, review_status = ?
-                WHERE id = ?
-            ");
-            $stmt->execute([
-                $finalScore,
-                $reviewStatus,
-                $attemptId
-            ]);
-
-            $pdo->commit();
-
-            set_review_flash('success', 'Attempt review saved successfully.');
-        } catch (PDOException $e) {
-            $pdo->rollBack();
-            set_review_flash('error', 'Unable to save review.');
-        }
-
-        redirect_to('teacher/review_attempt.php?attempt_id=' . $attemptId);
-    }
-}
-
-$flash = null;
-
-if (isset($_SESSION['review_flash'])) {
-    $flash = $_SESSION['review_flash'];
-    unset($_SESSION['review_flash']);
-}
-
-$pageTitle = 'Review Attempt';
+$pageTitle = 'Results';
 $panelLabel = 'Teacher Panel';
 $activePage = 'results';
 $extraStyles = ['assets/css/teacher-results.css'];
@@ -282,230 +84,167 @@ $extraStyles = ['assets/css/teacher-results.css'];
 require_once __DIR__ . '/../includes/dashboard_header.php';
 ?>
 
-<section class="review-hero">
+<section class="results-hero">
     <div>
-        <span>Attempt Review</span>
-        <h2><?php echo e($attempt['title']); ?></h2>
-        <p><?php echo e($attempt['full_name']); ?> • <?php echo e($attempt['subject']); ?></p>
-    </div>
-
-    <div class="review-score-box">
-        <strong><?php echo e(review_percent($attempt['score'], $attempt['total_points_at_time'])); ?>%</strong>
-        <span><?php echo e($attempt['score']); ?> / <?php echo e($attempt['total_points_at_time']); ?></span>
+        <span>Exam Results</span>
+        <h2>Review submitted exams and finalize scores</h2>
+        <p>Check student submissions, review essay answers, monitor flagged attempts, and finalize exam results.</p>
     </div>
 </section>
 
-<?php if ($flash): ?>
-    <?php if ($flash['type'] === 'success'): ?>
-        <div class="alert-success"><?php echo e($flash['message']); ?></div>
-    <?php else: ?>
-        <div class="alert-error"><?php echo e($flash['message']); ?></div>
-    <?php endif; ?>
-<?php endif; ?>
-
-<section class="review-layout">
-    <div class="content-card">
-        <div class="section-heading">
-            <div>
-                <span>Student Submission</span>
-                <h2>Check answers and score essays manually</h2>
-            </div>
-        </div>
-
-        <form method="POST" class="review-form">
-            <input type="hidden" name="csrf_token" value="<?php echo e($token); ?>">
-            <input type="hidden" name="action" value="save_review">
-
-            <div class="review-question-list">
-                <?php foreach ($questions as $index => $question): ?>
-                    <?php
-                        $qid = (int) $question['id'];
-                        $questionType = $question['question_type'];
-                        $answer = isset($answerMap[$qid]) ? $answerMap[$qid] : null;
-                        $studentAnswerText = 'No answer submitted';
-                        $correctAnswerText = 'Manual checking';
-                        $answerClass = 'pending';
-                        $answerStatus = 'For Review';
-
-                        if ($questionType === 'multiple_choice' || $questionType === 'true_false') {
-                            $correctAnswerText = isset($correctChoiceMap[$qid]) ? $correctChoiceMap[$qid]['choice_text'] : 'No answer guide';
-
-                            if ($answer && $answer['choice_id']) {
-                                $selectedChoiceId = (int) $answer['choice_id'];
-
-                                if (isset($choiceMap[$qid])) {
-                                    foreach ($choiceMap[$qid] as $choice) {
-                                        if ((int) $choice['id'] === $selectedChoiceId) {
-                                            $studentAnswerText = $choice['choice_text'];
-
-                                            if ((int) $choice['is_correct'] === 1) {
-                                                $answerClass = 'correct';
-                                                $answerStatus = 'Correct';
-                                            } else {
-                                                $answerClass = 'incorrect';
-                                                $answerStatus = 'Incorrect';
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                $answerClass = 'incorrect';
-                                $answerStatus = 'No Answer';
-                            }
-                        }
-
-                        if ($questionType === 'identification') {
-                            $correctAnswerText = isset($correctChoiceMap[$qid]) ? $correctChoiceMap[$qid]['choice_text'] : 'No answer guide';
-
-                            if ($answer && $answer['answer_text'] !== '') {
-                                $studentAnswerText = $answer['answer_text'];
-
-                                if (review_normalize_answer($studentAnswerText) === review_normalize_answer($correctAnswerText)) {
-                                    $answerClass = 'correct';
-                                    $answerStatus = 'Correct';
-                                } else {
-                                    $answerClass = 'incorrect';
-                                    $answerStatus = 'Incorrect';
-                                }
-                            } else {
-                                $answerClass = 'incorrect';
-                                $answerStatus = 'No Answer';
-                            }
-                        }
-
-                        if ($questionType === 'essay') {
-                            $correctAnswerText = 'Teacher manual checking';
-                            $answerClass = 'pending';
-                            $answerStatus = 'Manual Check';
-
-                            if ($answer && $answer['answer_text'] !== '') {
-                                $studentAnswerText = $answer['answer_text'];
-                            }
-                        }
-
-                        $manualValue = '';
-                        $feedbackValue = '';
-
-                        if ($answer) {
-                            $manualValue = $answer['points_awarded'];
-                            $feedbackValue = $answer['teacher_feedback'];
-                        }
-                    ?>
-
-                    <article class="review-question-card <?php echo e($answerClass); ?>">
-                        <div class="review-question-top">
-                            <div>
-                                <span>Question <?php echo e($index + 1); ?> • <?php echo e(review_question_label($questionType)); ?></span>
-                                <h3><?php echo e($question['question_text']); ?></h3>
-                            </div>
-
-                            <div class="answer-status-pill <?php echo e($answerClass); ?>">
-                                <?php echo e($answerStatus); ?>
-                            </div>
-                        </div>
-
-                        <div class="review-answer-grid">
-                            <div>
-                                <span>Student Answer</span>
-                                <p><?php echo e($studentAnswerText); ?></p>
-                            </div>
-
-                            <div>
-                                <span>Answer Guide</span>
-                                <p><?php echo e($correctAnswerText); ?></p>
-                            </div>
-
-                            <div>
-                                <span>Points</span>
-                                <p><?php echo e($question['points']); ?></p>
-                            </div>
-                        </div>
-
-                        <?php if ($questionType === 'essay'): ?>
-                            <div class="manual-score-box">
-                                <div class="form-group">
-                                    <label for="manual_score_<?php echo e($qid); ?>">Manual Score</label>
-                                    <input 
-                                        type="number" 
-                                        id="manual_score_<?php echo e($qid); ?>" 
-                                        name="manual_scores[<?php echo e($qid); ?>]" 
-                                        min="0" 
-                                        max="<?php echo e($question['points']); ?>" 
-                                        step="0.01" 
-                                        value="<?php echo e($manualValue); ?>"
-                                        placeholder="0"
-                                    >
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="feedback_<?php echo e($qid); ?>">Teacher Feedback</label>
-                                    <textarea 
-                                        id="feedback_<?php echo e($qid); ?>" 
-                                        name="feedbacks[<?php echo e($qid); ?>]" 
-                                        placeholder="Optional feedback for this essay answer"
-                                    ><?php echo e($feedbackValue); ?></textarea>
-                                </div>
-                            </div>
-                        <?php endif; ?>
-                    </article>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="content-card review-final-card">
-                <div class="form-group">
-                    <label for="review_status">Final Review Status</label>
-                    <select id="review_status" name="review_status">
-                        <option value="normal" <?php echo $attempt['review_status'] === 'normal' ? 'selected' : ''; ?>>Normal</option>
-                        <option value="under_review" <?php echo $attempt['review_status'] === 'under_review' ? 'selected' : ''; ?>>Under Review</option>
-                        <option value="flagged" <?php echo $attempt['review_status'] === 'flagged' ? 'selected' : ''; ?>>Flagged</option>
-                        <option value="cleared" <?php echo $attempt['review_status'] === 'cleared' ? 'selected' : ''; ?>>Cleared</option>
-                        <option value="invalidated" <?php echo $attempt['review_status'] === 'invalidated' ? 'selected' : ''; ?>>Invalidated</option>
-                    </select>
-                </div>
-
-                <div class="form-actions">
-                    <a href="results.php" class="secondary-action">Back to Results</a>
-                    <button type="submit" class="primary-button">Save Review</button>
-                </div>
-            </div>
-        </form>
+<section class="dashboard-grid teacher-result-stats">
+    <div class="dashboard-card">
+        <span>Submitted Attempts</span>
+        <h3><?php echo e($totalSubmitted); ?></h3>
     </div>
 
-    <aside class="content-card review-side-card">
-        <div class="section-heading">
-            <div>
-                <span>Attempt Summary</span>
-                <h2>Review Details</h2>
-            </div>
-        </div>
+    <div class="dashboard-card warning">
+        <span>Under Review</span>
+        <h3><?php echo e($underReview); ?></h3>
+    </div>
 
-        <div class="review-summary-list">
-            <div>
-                <span>Student</span>
-                <strong><?php echo e($attempt['full_name']); ?></strong>
-            </div>
+    <div class="dashboard-card warning">
+        <span>Flagged</span>
+        <h3><?php echo e($flagged); ?></h3>
+    </div>
 
-            <div>
-                <span>Username</span>
-                <strong><?php echo e($attempt['username']); ?></strong>
-            </div>
+    <div class="dashboard-card">
+        <span>Cleared / Normal</span>
+        <h3><?php echo e($cleared); ?></h3>
+    </div>
 
-            <div>
-                <span>Violations</span>
-                <strong><?php echo e($attempt['violation_count']); ?></strong>
-            </div>
-
-            <div>
-                <span>Status</span>
-                <strong><?php echo e(ucwords(str_replace('_', ' ', $attempt['review_status']))); ?></strong>
-            </div>
-
-            <div>
-                <span>Submitted</span>
-                <strong><?php echo e(date('M d, Y h:i A', strtotime($attempt['submitted_at']))); ?></strong>
-            </div>
-        </div>
-    </aside>
+    <div class="dashboard-card">
+        <span>Invalidated</span>
+        <h3><?php echo e($invalidated); ?></h3>
+    </div>
 </section>
+
+<section class="content-card">
+    <div class="section-heading">
+        <div>
+            <span>Submitted Exams</span>
+            <h2>Student Attempt Records</h2>
+        </div>
+    </div>
+
+    <div class="result-tools">
+        <input type="text" id="resultSearch" placeholder="Search student, exam, subject, or status">
+
+        <select id="resultFilter">
+            <option value="all">All Results</option>
+            <option value="under_review">Under Review</option>
+            <option value="flagged">Flagged</option>
+            <option value="normal">Normal</option>
+            <option value="cleared">Cleared</option>
+            <option value="invalidated">Invalidated</option>
+        </select>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table" id="resultsTable">
+            <thead>
+                <tr>
+                    <th>Student</th>
+                    <th>Exam</th>
+                    <th>Score</th>
+                    <th>Questions</th>
+                    <th>Essay</th>
+                    <th>Violations</th>
+                    <th>Review</th>
+                    <th>Submitted</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                <?php if (count($attempts) > 0): ?>
+                    <?php foreach ($attempts as $attempt): ?>
+                        <?php $percent = result_percent($attempt['score'], $attempt['total_points_at_time']); ?>
+
+                        <tr data-review-status="<?php echo e($attempt['review_status']); ?>">
+                            <td>
+                                <strong><?php echo e($attempt['full_name']); ?></strong>
+                                <small><?php echo e($attempt['username']); ?></small>
+                            </td>
+
+                            <td>
+                                <strong><?php echo e($attempt['title']); ?></strong>
+                                <small><?php echo e($attempt['subject']); ?></small>
+                            </td>
+
+                            <td>
+                                <strong><?php echo e($percent); ?>%</strong>
+                                <small><?php echo e($attempt['score']); ?> / <?php echo e($attempt['total_points_at_time']); ?></small>
+                            </td>
+
+                            <td><?php echo e($attempt['question_count']); ?></td>
+                            <td><?php echo e($attempt['essay_count']); ?></td>
+                            <td><?php echo e($attempt['violation_count']); ?></td>
+
+                            <td>
+                                <span class="status-badge <?php echo e($attempt['review_status']); ?>">
+                                    <?php echo e(ucwords(str_replace('_', ' ', $attempt['review_status']))); ?>
+                                </span>
+                            </td>
+
+                            <td>
+                                <?php echo e(date('M d, Y h:i A', strtotime($attempt['submitted_at']))); ?>
+                            </td>
+
+                            <td>
+                                <a class="table-btn review" href="review_attempt.php?attempt_id=<?php echo e($attempt['attempt_id']); ?>">
+                                    Review
+                                </a>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                <?php else: ?>
+                    <tr>
+                        <td colspan="9" class="empty-state">No submitted exam attempts yet.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var searchInput = document.getElementById("resultSearch");
+    var filterInput = document.getElementById("resultFilter");
+    var table = document.getElementById("resultsTable");
+
+    function filterResults() {
+        if (!table) {
+            return;
+        }
+
+        var searchValue = searchInput ? searchInput.value.toLowerCase() : "";
+        var filterValue = filterInput ? filterInput.value : "all";
+        var rows = table.querySelectorAll("tbody tr");
+
+        for (var i = 0; i < rows.length; i++) {
+            var text = rows[i].textContent.toLowerCase();
+            var status = rows[i].getAttribute("data-review-status");
+            var matchesSearch = text.indexOf(searchValue) > -1;
+            var matchesFilter = filterValue === "all" || status === filterValue;
+
+            if (matchesSearch && matchesFilter) {
+                rows[i].style.display = "";
+            } else {
+                rows[i].style.display = "none";
+            }
+        }
+    }
+
+    if (searchInput) {
+        searchInput.addEventListener("keyup", filterResults);
+    }
+
+    if (filterInput) {
+        filterInput.addEventListener("change", filterResults);
+    }
+});
+</script>
 
 <?php require_once __DIR__ . '/../includes/dashboard_footer.php'; ?>
