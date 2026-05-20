@@ -1,0 +1,16 @@
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+*.log
+
+uploads/snapshots/*
+assets/snapshots/*
+
+!uploads/snapshots/.gitkeep
+!assets/snapshots/.gitkeep
+
+config/.env
+.env
