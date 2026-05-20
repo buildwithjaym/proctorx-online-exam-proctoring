@@ -1,0 +1,354 @@
+.proctor-hero {
+    background: linear-gradient(135deg, var(--primary-green), var(--secondary-green));
+    color: #ffffff;
+    border-radius: 28px;
+    padding: 30px;
+    margin-bottom: 24px;
+    box-shadow: 0 18px 42px rgba(8, 28, 21, 0.18);
+}
+
+.proctor-hero span {
+    color: var(--premium-gold);
+    font-weight: 900;
+    font-size: 13px;
+}
+
+.proctor-hero h2 {
+    margin: 8px 0;
+    font-size: 34px;
+    letter-spacing: -0.7px;
+}
+
+.proctor-hero p {
+    margin: 0;
+    max-width: 720px;
+    color: rgba(255, 255, 255, 0.78);
+    line-height: 1.6;
+}
+
+.proctor-stats-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.success-card h3 {
+    color: #16A34A;
+}
+
+.proctor-dashboard-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+    gap: 22px;
+    margin-top: 24px;
+}
+
+.proctor-dashboard-layout .content-card {
+    margin-top: 0;
+}
+
+.proctor-exam-list,
+.live-attempt-list,
+.proctor-log-list {
+    display: grid;
+    gap: 16px;
+}
+
+.proctor-exam-card {
+    background: #F8FAF7;
+    border: 1px solid var(--border-light);
+    border-radius: 24px;
+    padding: 20px;
+}
+
+.proctor-exam-top {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+}
+
+.proctor-exam-top h3 {
+    margin: 10px 0 5px;
+    color: var(--text-dark);
+    font-size: 22px;
+    line-height: 1.25;
+}
+
+.proctor-exam-top p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+.proctor-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.proctor-status.open {
+    background: #DCFCE7;
+    color: #166534;
+}
+
+.proctor-status.upcoming {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.proctor-status.closed {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.proctor-status.neutral {
+    background: #F3F4F6;
+    color: #374151;
+}
+
+.exam-live-box {
+    min-width: 84px;
+    height: 78px;
+    border-radius: 20px;
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    display: grid;
+    place-items: center;
+    text-align: center;
+    padding: 10px;
+}
+
+.exam-live-box strong {
+    color: var(--primary-green);
+    font-size: 26px;
+    line-height: 1;
+}
+
+.exam-live-box span {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.proctor-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.proctor-meta-grid div {
+    background: #ffffff;
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 12px;
+}
+
+.proctor-meta-grid span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 900;
+    margin-bottom: 5px;
+}
+
+.proctor-meta-grid strong {
+    color: var(--text-dark);
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.proctor-card-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+}
+
+.live-attempt-card {
+    background: #F8FAF7;
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    padding: 16px;
+}
+
+.live-attempt-card h3 {
+    margin: 0 0 4px;
+    color: var(--text-dark);
+    font-size: 17px;
+}
+
+.live-attempt-card span {
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.live-attempt-card p {
+    margin: 12px 0;
+    color: var(--text-dark);
+    font-weight: 800;
+    line-height: 1.4;
+}
+
+.live-attempt-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.live-attempt-footer strong {
+    color: #991B1B;
+    font-size: 13px;
+}
+
+.live-attempt-card a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    border-radius: 13px;
+    padding: 0 14px;
+    background: #EEF6EF;
+    color: var(--secondary-green);
+    text-decoration: none;
+    font-weight: 900;
+    width: 100%;
+}
+
+.status-badge.normal,
+.status-badge.cleared {
+    background: #DCFCE7;
+    color: #166534;
+}
+
+.status-badge.flagged {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.status-badge.under_review {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.status-badge.invalidated {
+    background: #F3F4F6;
+    color: #374151;
+}
+
+.proctor-log-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-start;
+    background: #F8FAF7;
+    border: 1px solid var(--border-light);
+    border-radius: 20px;
+    padding: 16px;
+}
+
+.proctor-log-item h3 {
+    margin: 8px 0 5px;
+    color: var(--text-dark);
+    font-size: 16px;
+}
+
+.proctor-log-item p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.severity-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.severity-pill.low {
+    background: #E0F2FE;
+    color: #0369A1;
+}
+
+.severity-pill.medium {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.severity-pill.high {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+.log-time {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.empty-panel {
+    background: #F8FAF7;
+    border: 1px dashed var(--border-light);
+    border-radius: 20px;
+    padding: 28px;
+    color: var(--text-muted);
+    text-align: center;
+    font-weight: 800;
+    line-height: 1.5;
+}
+
+@media (max-width: 1200px) {
+    .proctor-dashboard-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .proctor-stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 860px) {
+    .proctor-hero {
+        padding: 24px;
+        border-radius: 24px;
+    }
+
+    .proctor-hero h2 {
+        font-size: 28px;
+    }
+
+    .proctor-stats-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .proctor-exam-top,
+    .proctor-log-item {
+        flex-direction: column;
+    }
+
+    .exam-live-box {
+        width: 100%;
+    }
+
+    .proctor-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .proctor-card-actions {
+        justify-content: stretch;
+    }
+
+    .proctor-card-actions a {
+        width: 100%;
+    }
+
+    .log-time {
+        white-space: normal;
+    }
+}

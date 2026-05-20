@@ -536,3 +536,25 @@ CREATE TABLE proctor_reports (
         ON DELETE RESTRICT
         ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE proctor_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    attempt_id INT NOT NULL,
+    event_type VARCHAR(80) NOT NULL,
+    severity ENUM('low', 'medium', 'high') NOT NULL DEFAULT 'low',
+    event_description TEXT NOT NULL,
+    metadata_json TEXT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_proctor_logs_attempt_id (attempt_id),
+    INDEX idx_proctor_logs_event_type (event_type),
+    INDEX idx_proctor_logs_severity (severity),
+    INDEX idx_proctor_logs_created_at (created_at),
+
+    CONSTRAINT fk_proctor_logs_attempt
+        FOREIGN KEY (attempt_id)
+        REFERENCES exam_attempts(id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
